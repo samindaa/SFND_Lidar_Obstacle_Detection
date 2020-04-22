@@ -143,32 +143,33 @@ ProcessPointClouds<PointT>::Segment(typename pcl::PointCloud<PointT>::Ptr cloud,
       }
     }
 
-    Eigen::Vector3d p1(cloud->points[sample_points[0]].x,
-                       cloud->points[sample_points[0]].y,
-                       cloud->points[sample_points[0]].z);
-    Eigen::Vector3d p2(cloud->points[sample_points[1]].x,
-                       cloud->points[sample_points[1]].y,
-                       cloud->points[sample_points[1]].z);
-    Eigen::Vector3d p3(cloud->points[sample_points[2]].x,
-                       cloud->points[sample_points[2]].y,
-                       cloud->points[sample_points[2]].z);
+    const Eigen::Vector3f p1(cloud->points[sample_points[0]].x,
+                             cloud->points[sample_points[0]].y,
+                             cloud->points[sample_points[0]].z);
+    const Eigen::Vector3f p2(cloud->points[sample_points[1]].x,
+                             cloud->points[sample_points[1]].y,
+                             cloud->points[sample_points[1]].z);
+    const Eigen::Vector3f p3(cloud->points[sample_points[2]].x,
+                             cloud->points[sample_points[2]].y,
+                             cloud->points[sample_points[2]].z);
     //    std::cout << "p1: " << p1 << "\np2: " << p2 << "\np3:" << p3 <<
     //    std::endl;
 
-    Eigen::Vector3d v1 = p2 - p1;
-    Eigen::Vector3d v2 = p3 - p1;
-    Eigen::Vector3d nn = v1.cross(v2);
+    const Eigen::Vector3f v1 = p2 - p1;
+    const Eigen::Vector3f v2 = p3 - p1;
+    const Eigen::Vector3f nn = v1.cross(v2);
 
-    Eigen::Vector4d line_coeff(nn.x(), nn.y(), nn.z(), -nn.dot(p1)); // ABCD
-    const auto denom = std::sqrt(line_coeff.x() * line_coeff.x() +
-                                 line_coeff.y() * line_coeff.y() +
-                                 line_coeff.z() * line_coeff.z());
+    const Eigen::Vector4f line_coeff(nn.x(), nn.y(), nn.z(),
+                                     -nn.dot(p1)); // ABCD
+    const float right_const =
+        distanceThreshold * distanceThreshold *
+        (line_coeff.x() * line_coeff.x() + line_coeff.y() * line_coeff.y() +
+         line_coeff.z() * line_coeff.z());
     std::unordered_set<size_t> result;
     for (size_t i = 0; i < cloud->points.size(); ++i) {
-      Eigen::Vector4d point(cloud->points[i].x, cloud->points[i].y,
+      Eigen::Vector4f point(cloud->points[i].x, cloud->points[i].y,
                             cloud->points[i].z, 1.0F);
-      const auto d = std::fabs(line_coeff.dot(point)) / denom;
-      if (d <= distanceThreshold) {
+      if (std::pow(line_coeff.dot(point), 2) <= right_const) {
         result.insert(i);
       }
     }
@@ -203,6 +204,43 @@ ProcessPointClouds<PointT>::Segment(typename pcl::PointCloud<PointT>::Ptr cloud,
 }
 
 template <typename PointT>
+void ProcessPointClouds<PointT>::proximity(
+    typename pcl::PointCloud<PointT>::Ptr cloud, const int &id,
+    std::vector<bool> &processed, std::vector<int> &cluster,
+    std::shared_ptr<KdTree> tree, float distanceTol) {
+  processed[id] = true;
+  cluster.emplace_back(id);
+  const std::vector<int> nearby_points = tree->search(
+      {cloud->points[id].x, cloud->points[id].y, cloud->points[id].z},
+      distanceTol);
+  for (const auto &nearby_point_id : nearby_points) {
+    if (!processed[nearby_point_id]) {
+      proximity(cloud, nearby_point_id, processed, cluster, tree, distanceTol);
+    }
+  }
+}
+
+template <typename PointT>
+std::vector<std::vector<int>> ProcessPointClouds<PointT>::euclidean_cluster(
+    typename pcl::PointCloud<PointT>::Ptr cloud, std::shared_ptr<KdTree> tree,
+    float distanceTol) {
+
+  // TODO: Fill out this function to return list of indices for each cluster
+
+  std::vector<std::vector<int>> clusters;
+  std::vector<bool> processed(cloud->points.size(), false);
+  for (size_t id = 0; id < cloud->points.size(); ++id) {
+    if (!processed[id]) {
+      std::vector<int> cluster;
+      proximity(cloud, id, processed, cluster, tree, distanceTol);
+      clusters.emplace_back(cluster);
+    }
+  }
+
+  return clusters;
+}
+
+template <typename PointT>
 std::vector<typename pcl::PointCloud<PointT>::Ptr>
 ProcessPointClouds<PointT>::Clustering(
     typename pcl::PointCloud<PointT>::Ptr cloud, float clusterTolerance,
@@ -211,10 +249,30 @@ ProcessPointClouds<PointT>::Clustering(
   // Time clustering process
   auto startTime = std::chrono::steady_clock::now();
 
-  std::vector<typename pcl::PointCloud<PointT>::Ptr> clusters;
-
   // TODO:: Fill in the function to perform euclidean clustering to group
   // detected obstacles
+
+  std::vector<typename pcl::PointCloud<PointT>::Ptr> clusters;
+  std::shared_ptr<KdTree> tree = std::make_shared<KdTree>();
+  for (size_t i = 0; i < cloud->points.size(); ++i) {
+    tree->insert({cloud->points[i].x, cloud->points[i].y, cloud->points[i].z},
+                 i);
+  }
+
+  // TODO(saminda): use min and max
+  std::vector<std::vector<int>> ec_clusters =
+      euclidean_cluster(cloud, tree, clusterTolerance);
+
+  std::cout << "clusers: " << clusters.size() << std::endl;
+
+  for (const std::vector<int> &cluster : ec_clusters) {
+    pcl::PointCloud<pcl::PointXYZ>::Ptr cluster_cloud(
+        new pcl::PointCloud<pcl::PointXYZ>());
+    for (const int &indice : cluster) {
+      cluster_cloud->points.push_back(cloud->points[indice]);
+    }
+    clusters.emplace_back(cluster_cloud);
+  }
 
   auto endTime = std::chrono::steady_clock::now();
   auto elapsedTime = std::chrono::duration_cast<std::chrono::milliseconds>(

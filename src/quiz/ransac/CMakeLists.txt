@@ -2,8 +2,14 @@ cmake_minimum_required(VERSION 2.8 FATAL_ERROR)
 
 add_definitions(-std=c++11)
 
-set(CXX_FLAGS "-Wall")
+if(NOT CMAKE_BUILD_TYPE)
+  set(CMAKE_BUILD_TYPE Release)
+endif()
+
+set(CXX_FLAGS "-Wall -Wextra")
 set(CMAKE_CXX_FLAGS, "${CXX_FLAGS}")
+set(CMAKE_CXX_FLAGS_DEBUG "-g")
+set(CMAKE_CXX_FLAGS_RELEASE "-O3")
 
 project(playback)
 
