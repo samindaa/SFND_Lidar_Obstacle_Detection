@@ -50,12 +50,23 @@ private:
       return;
     }
 
-    auto box_check = [](const float &q, const float &t, const float &dist) {
+    auto box_bound = [](const float &q, const float &t, const float &dist) {
       return ((-dist <= (q - t)) && ((q - t) <= dist));
     };
 
-    auto cir_check = [](const std::vector<float> &q,
-                        const std::vector<float> &t, const float &dist) {
+    auto box_check = [&box_bound](const std::vector<float> &q,
+                                  const std::vector<float> &t,
+                                  const float &dist) {
+      for (size_t i = 0; i < q.size(); ++i) {
+        if (!box_bound(q[i], t[i], dist)) {
+          return false;
+        }
+      }
+      return true;
+    };
+
+    auto sphere_check = [](const std::vector<float> &q,
+                           const std::vector<float> &t, const float &dist) {
       float norm2 = 0.0F;
       for (size_t i = 0; i < q.size(); ++i) {
         norm2 += std::pow(q[i] - t[i], 2);
@@ -63,23 +74,17 @@ private:
       return norm2 <= dist * dist;
     };
 
-    bool box_check_status = true;
-    for (size_t i = 0; i < node->point.size(); ++i) {
-      if (!box_check(node->point[i], target[i], distance_tol)) {
-        box_check_status = false;
-        break;
-      }
-    }
-    if (box_check_status && cir_check(node->point, target, distance_tol)) {
+    if (box_check(node->point, target, distance_tol) &&
+        sphere_check(node->point, target, distance_tol)) {
       ids.emplace_back(node->id);
     }
 
-    if (target[d % target.size()] - distance_tol <
-        node->point[d % target.size()]) {
+    const float tgt_value = target[d % target.size()];
+    const float qry_value = node->point[d % target.size()];
+    if (tgt_value - distance_tol <= qry_value) {
       search_helper(ids, target, node->left, distance_tol, ++d);
     }
-    if (target[d % target.size()] + distance_tol >
-        node->point[d % target.size()]) {
+    if (tgt_value + distance_tol > qry_value) {
       search_helper(ids, target, node->right, distance_tol, ++d);
     }
   }

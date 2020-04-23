@@ -50,13 +50,13 @@ public:
     std::vector<boost::filesystem::path> streamPcd(std::string dataPath);
 
 private:
-    void proximity(typename pcl::PointCloud<PointT>::Ptr cloud, const int &id,
+    void Proximity(typename pcl::PointCloud<PointT>::Ptr cloud, const int &id,
                    std::vector<bool> &processed, std::vector<int> &cluster,
-                   std::shared_ptr<KdTree> tree, float distanceTol);
+                   std::shared_ptr<KdTree> tree, float distanceTol, int maxSize);
 
     std::vector<std::vector<int>>
-    euclidean_cluster(typename pcl::PointCloud<PointT>::Ptr cloud,
-                      std::shared_ptr<KdTree> tree, float distanceTol);
+    EuclideanCluster(typename pcl::PointCloud<PointT>::Ptr cloud,
+                      std::shared_ptr<KdTree> tree, float distanceTol, int maxSize);
   
 };
 #endif /* PROCESSPOINTCLOUDS_H_ */
