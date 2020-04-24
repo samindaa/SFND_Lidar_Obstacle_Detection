@@ -152,39 +152,32 @@ ProcessPointClouds<PointT>::Segment(typename pcl::PointCloud<PointT>::Ptr cloud,
   if (cloud->points.size() < 3) {
     return {};
   }
-  std::random_device rd;
-  std::mt19937 gen(rd());
+  static std::random_device rd;
+  static std::mt19937 gen(rd());
   std::uniform_int_distribution<size_t> dis(0, cloud->points.size() - 1);
 
-  std::unordered_set<size_t> inliers_result;
+  std::vector<int> inliers_result;
   // For max iterations
-  do {
+  while (--maxIterations > 0) {
     //    std::cout << "iter: " << maxIterations << std::endl;
-    std::vector<size_t> sample_points;
+    std::unordered_set<int> sample_points;
     // Assuming all the sampling points are different by a delta.
     while (sample_points.size() < 3) {
-      auto point_idx = dis(gen);
-      bool safe_point_idx = true;
-      for (const auto &sample_point : sample_points) {
-        if (sample_point == point_idx) {
-          safe_point_idx = false;
-          break;
-        }
-      }
-      if (safe_point_idx) {
-        sample_points.emplace_back(point_idx);
-      }
+      sample_points.insert(dis(gen));
     }
 
-    const Eigen::Vector3f p1(cloud->points[sample_points[0]].x,
-                             cloud->points[sample_points[0]].y,
-                             cloud->points[sample_points[0]].z);
-    const Eigen::Vector3f p2(cloud->points[sample_points[1]].x,
-                             cloud->points[sample_points[1]].y,
-                             cloud->points[sample_points[1]].z);
-    const Eigen::Vector3f p3(cloud->points[sample_points[2]].x,
-                             cloud->points[sample_points[2]].y,
-                             cloud->points[sample_points[2]].z);
+    auto sample_points_iter = sample_points.begin();
+    const Eigen::Vector3f p1(cloud->points[*sample_points_iter].x,
+                             cloud->points[*sample_points_iter].y,
+                             cloud->points[*sample_points_iter].z);
+    ++sample_points_iter;
+    const Eigen::Vector3f p2(cloud->points[*sample_points_iter].x,
+                             cloud->points[*sample_points_iter].y,
+                             cloud->points[*sample_points_iter].z);
+    ++sample_points_iter;
+    const Eigen::Vector3f p3(cloud->points[*sample_points_iter].x,
+                             cloud->points[*sample_points_iter].y,
+                             cloud->points[*sample_points_iter].z);
     //    std::cout << "p1: " << p1 << "\np2: " << p2 << "\np3:" << p3 <<
     //    std::endl;
 
@@ -198,12 +191,12 @@ ProcessPointClouds<PointT>::Segment(typename pcl::PointCloud<PointT>::Ptr cloud,
         distanceThreshold * distanceThreshold *
         (line_coeff.x() * line_coeff.x() + line_coeff.y() * line_coeff.y() +
          line_coeff.z() * line_coeff.z());
-    std::unordered_set<size_t> result;
+    std::vector<int> result;
     for (size_t i = 0; i < cloud->points.size(); ++i) {
       Eigen::Vector4f point(cloud->points[i].x, cloud->points[i].y,
                             cloud->points[i].z, 1.0F);
       if (std::pow(line_coeff.dot(point), 2) <= right_const) {
-        result.insert(i);
+        result.emplace_back(i);
       }
     }
     if (result.size() > inliers_result.size()) {
@@ -213,7 +206,7 @@ ProcessPointClouds<PointT>::Segment(typename pcl::PointCloud<PointT>::Ptr cloud,
       inliers_result = std::move(result);
     }
 
-  } while (--maxIterations > 0);
+  }
 
   auto endTime = std::chrono::steady_clock::now();
   auto elapsedTime = std::chrono::duration_cast<std::chrono::milliseconds>(
@@ -221,19 +214,9 @@ ProcessPointClouds<PointT>::Segment(typename pcl::PointCloud<PointT>::Ptr cloud,
   std::cout << "plane segmentation took " << elapsedTime.count()
             << " milliseconds" << std::endl;
 
-  typename pcl::PointCloud<PointT>::Ptr cloud_inliers(
-      new pcl::PointCloud<PointT>()),
-      cloud_outliers(new pcl::PointCloud<PointT>());
-
-  for (size_t index = 0; index < cloud->points.size(); index++) {
-    const PointT &point = cloud->points[index];
-    if (inliers_result.count(index)) {
-      cloud_inliers->points.push_back(point);
-    } else {
-      cloud_outliers->points.push_back(point);
-    }
-  }
-  return {cloud_outliers, cloud_inliers};
+  pcl::PointIndices::Ptr inliers(new pcl::PointIndices());
+  inliers->indices = std::move(inliers_result);
+  return SeparateClouds(inliers, cloud);
 }
 
 template <typename PointT>

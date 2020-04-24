@@ -73,19 +73,20 @@ void cityBlock(
                                                    {-10.0F, -5.0F, -2.0F, 1.0F},
                                                    {40.0F, 7.0F, 1.0F, 1.0F});
 
-  auto segmented_pair = point_processor->Segment(output_cloud, 20, 0.2);
+  auto segmented_pair = point_processor->Segment(output_cloud, 50, 0.2);
   auto clusters =
       point_processor->Clustering(segmented_pair.first, 0.6, 15, 650);
   static std::vector<Color> colors = {Color(1, 0, 0), Color(0, 0, 1),
                                       Color(0, 1, 1)};
   for (size_t cluster_id = 0; cluster_id < clusters.size(); ++cluster_id) {
-    renderPointCloud(viewer, clusters[cluster_id],
-                     "obs" + std::to_string(cluster_id),
-                     colors[cluster_id % colors.size()]);
-    Box box = point_processor->BoundingBox(clusters[cluster_id]);
-    renderBox(viewer, box, cluster_id);
+//    renderPointCloud(viewer, clusters[cluster_id],
+//                     "obs" + std::to_string(cluster_id),
+//                     colors[cluster_id % colors.size()]);
+//    Box box = point_processor->BoundingBox(clusters[cluster_id]);
+//    renderBox(viewer, box, cluster_id);
   }
 
+  renderPointCloud(viewer, segmented_pair.first, "obs", Color(1, 0, 0));
   renderPointCloud(viewer, segmented_pair.second, "plane", Color(0.3, 0.5, 0));
 }
 
